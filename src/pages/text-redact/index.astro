@@ -56,12 +56,19 @@ import Layout from '../../layouts/Layout.astro';
 
   <section class="section">
     <label for="output-text" class="label">处理结果</label>
-    <textarea
-      id="output-text"
-      class="textarea textarea--readonly"
-      readonly
-      placeholder="（处理后的文本将显示在这里）"
-    ></textarea>
+    <div class="output-wrapper">
+      <textarea
+        id="output-text"
+        class="textarea textarea--readonly"
+        readonly
+        placeholder="（处理后的文本将显示在这里）"
+      ></textarea>
+      <span id="processing-indicator" class="processing-indicator" aria-label="处理中">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </span>
+    </div>
     <button type="button" id="copy-btn" class="btn-primary" disabled>
       <span id="copy-icon">📋</span>
       <span id="copy-text">复制处理结果</span>
@@ -84,17 +91,36 @@ import Layout from '../../layouts/Layout.astro';
   const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
   const copyIcon = document.getElementById('copy-icon') as HTMLSpanElement;
   const copyText = document.getElementById('copy-text') as HTMLSpanElement;
+  const processingIndicator = document.getElementById('processing-indicator') as HTMLSpanElement;
 
   // State
   let customWords: string[] = [];
   let debounceTimer: number | null = null;
+
+  // Dynamic debounce time based on text length
+  function getDebounceTime(textLength: number): number {
+    if (textLength > 50000) return 500;
+    if (textLength > 5000) return 300;
+    return 150;
+  }
+
+  // Processing indicator helpers
+  function showProcessingIndicator() {
+    processingIndicator.classList.add('active');
+  }
+
+  function hideProcessingIndicator() {
+    processingIndicator.classList.remove('active');
+  }
 
   // Debounced processing
   function scheduleProcess() {
     if (debounceTimer !== null) {
       clearTimeout(debounceTimer);
     }
-    debounceTimer = window.setTimeout(processText, 150);
+    showProcessingIndicator();
+    const debounceTime = getDebounceTime(inputText.value.length);
+    debounceTimer = window.setTimeout(processText, debounceTime);
   }
 
   function processText() {
@@ -108,6 +134,8 @@ import Layout from '../../layouts/Layout.astro';
 
     // Update copy button state
     copyBtn.disabled = !result;
+
+    hideProcessingIndicator();
   }
 
   // Clear button visibility
@@ -402,6 +430,51 @@ import Layout from '../../layouts/Layout.astro';
   .btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Output wrapper for indicator positioning */
+  .output-wrapper {
+    position: relative;
+  }
+
+  /* Processing indicator */
+  .processing-indicator {
+    position: absolute;
+    bottom: 0.75rem;
+    right: 0.75rem;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .processing-indicator.active {
+    opacity: 1;
+  }
+  .processing-indicator .dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--fg-muted);
+    opacity: 0.3;
+  }
+  .processing-indicator.active .dot {
+    animation: dot-pulse 0.9s infinite;
+  }
+  .processing-indicator.active .dot:nth-child(2) {
+    animation-delay: 0.3s;
+  }
+  .processing-indicator.active .dot:nth-child(3) {
+    animation-delay: 0.6s;
+  }
+
+  @keyframes dot-pulse {
+    0%, 100% {
+      opacity: 0.3;
+    }
+    33% {
+      opacity: 1;
+    }
   }
 
   /* Mobile adjustments */

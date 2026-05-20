@@ -46,6 +46,11 @@ export function redact(text: string, options: RedactOptions): string {
     return text;
   }
 
+  // Fast path: no work to do
+  if (options.customWords.length === 0 && !options.maskNumbers) {
+    return text;
+  }
+
   let result = text;
 
   // Step 1: Mask custom words (longer matches first to handle overlapping)
