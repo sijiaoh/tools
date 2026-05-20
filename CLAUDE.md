@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Personal tools collection hosted at https://tools.sijiaoh.com — a static, no-backend frontend built with **Astro** and deployed to **GitHub Pages**. Each "tool" is a self-contained mini-app (converter, calculator, generator, etc.) reachable from a single index page.
+Personal tools collection hosted at https://tools.sijiaoh.com — a static, no-backend frontend built with **Astro** and deployed to **Cloudflare Pages**. Each "tool" is a self-contained mini-app (converter, calculator, generator, etc.) reachable from a single index page.
 
 Single-user project (sijiaoh). Optimise for:
 1. **Simplicity over flexibility** — no accounts, tenancy, i18n machinery, or feature flags.
@@ -78,12 +78,15 @@ Use Astro's scoped `<style>` blocks per component. No global CSS framework unles
 
 ## Deployment
 
-Hosted on GitHub Pages at the custom domain `tools.sijiaoh.com`. Three things this depends on:
+Hosted on **Cloudflare Pages** at the custom domain `tools.sijiaoh.com`.
 
-1. `public/CNAME` containing the single line `tools.sijiaoh.com`
-2. `public/.nojekyll` (empty file) so GitHub Pages doesn't strip the `_astro/` build directory
-3. `astro.config.mjs` with `site: 'https://tools.sijiaoh.com'` and **no `base`** (the site lives at the domain root, not a subpath)
+Build configuration (set in Cloudflare Pages dashboard):
+- **Build command**: `npm run build`
+- **Output directory**: `dist`
+- **Production branch**: `main`
 
-CI/CD: `.github/workflows/deploy.yml` uses the official `withastro/action` on push to `main`. The action auto-detects the package manager from the lockfile — always commit the lockfile.
+Pushes to `main` automatically trigger a build and deploy via Cloudflare's Git integration.
 
-Apex DNS for `tools.sijiaoh.com` must be a `CNAME` to `sijiaoh.github.io` (configured outside this repo).
+DNS is managed by Cloudflare — the custom domain is configured in the Cloudflare Pages project settings.
+
+`astro.config.mjs` sets `site: 'https://tools.sijiaoh.com'` — this is used by Astro for generating canonical URLs, sitemaps, and other absolute URL references. No `base` path is needed since the site lives at the domain root.
