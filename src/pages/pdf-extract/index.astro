@@ -43,6 +43,29 @@ import Layout from '../../layouts/Layout.astro';
   </div>
 
   <a id="download" class="download-btn" hidden download>下载提取结果 (.txt)</a>
+
+  <div id="chinese-warning" class="chinese-warning" hidden>
+    <div class="chinese-warning-icon">⚠️</div>
+    <div class="chinese-warning-content">
+      <h3>中文提取可能不完整</h3>
+      <p>检测到提取的文本中中文字符比例异常低，可能存在以下情况：</p>
+      <ul>
+        <li><strong>嵌入字体编码问题</strong>：PDF使用了特殊编码的嵌入字体，导致中文无法正确解析</li>
+        <li><strong>字体未正确嵌入</strong>：PDF创建时字体信息丢失或损坏</li>
+      </ul>
+      <p><strong>建议尝试：</strong></p>
+      <ul>
+        <li>使用其他PDF阅读器（如Adobe Acrobat）打开并重新导出</li>
+        <li>如果是您自己生成的PDF，请确保在导出时选择"嵌入所有字体"或使用标准字体</li>
+        <li>尝试使用OCR工具识别PDF中的文字</li>
+      </ul>
+    </div>
+  </div>
+
+  <details id="debug-panel" class="debug-panel" hidden>
+    <summary>调试信息</summary>
+    <div id="debug-content" class="debug-content"></div>
+  </details>
 </Layout>
 
 <script>
@@ -54,7 +77,13 @@ import Layout from '../../layouts/Layout.astro';
     normalizeText,
     formatPageBlock,
     joinPages,
+    countCharTypes,
+    checkFontWarnings,
+    analyzeChineseExtraction,
     type TextItem,
+    type DebugInfo,
+    type FontInfo,
+    type PageDebugInfo,
   } from './_lib/text-processing';
 
   pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
@@ -68,6 +97,9 @@ import Layout from '../../layouts/Layout.astro';
   const progressContainer = document.getElementById('progress-container') as HTMLDivElement;
   const progressBar = document.getElementById('progress-bar') as HTMLDivElement;
   const progressText = document.getElementById('progress-text') as HTMLSpanElement;
+  const debugPanel = document.getElementById('debug-panel') as HTMLDetailsElement;
+  const debugContent = document.getElementById('debug-content') as HTMLDivElement;
+  const chineseWarning = document.getElementById('chinese-warning') as HTMLDivElement;
 
   let currentObjectUrl: string | null = null;
   let extractionStartTime: number | null = null;
@@ -163,6 +195,77 @@ import Layout from '../../layouts/Layout.astro';
     dropZoneContent.hidden = false;
   }
 
+  function renderDebugInfo(debugInfo: DebugInfo) {
+    let html = '';
+
+    // Warnings section (if any)
+    if (debugInfo.warnings.length > 0) {
+      html += '<div class="debug-section debug-section--warning">';
+      html += '<h4>警告</h4>';
+      html += '<ul>';
+      for (const warning of debugInfo.warnings) {
+        html += `<li>${warning}</li>`;
+      }
+      html += '</ul></div>';
+    }
+
+    // Fonts section
+    html += '<div class="debug-section">';
+    html += '<h4>检测到的字体</h4>';
+    if (debugInfo.fonts.length === 0) {
+      html += '<p>未检测到字体</p>';
+    } else {
+      html += '<ul>';
+      for (const font of debugInfo.fonts) {
+        html += `<li><code>${font.name}</code> (${font.type})</li>`;
+      }
+      html += '</ul>';
+    }
+    html += '</div>';
+
+    // Character statistics
+    const totalPages = debugInfo.pages.length;
+    const totalTextItems = debugInfo.pages.reduce((sum, p) => sum + p.textItemCount, 0);
+    const totalChinese = debugInfo.pages.reduce((sum, p) => sum + p.chineseCount, 0);
+    const totalEnglish = debugInfo.pages.reduce((sum, p) => sum + p.englishCount, 0);
+    const totalDigits = debugInfo.pages.reduce((sum, p) => sum + p.digitCount, 0);
+    const totalOther = debugInfo.pages.reduce((sum, p) => sum + p.otherCount, 0);
+
+    html += '<div class="debug-section">';
+    html += '<h4>字符统计</h4>';
+    html += '<table><tbody>';
+    html += `<tr><td>总页数</td><td>${totalPages}</td></tr>`;
+    html += `<tr><td>总 TextItem 数</td><td>${totalTextItems}</td></tr>`;
+    html += `<tr><td>中文字符</td><td>${totalChinese}</td></tr>`;
+    html += `<tr><td>英文字母</td><td>${totalEnglish}</td></tr>`;
+    html += `<tr><td>数字</td><td>${totalDigits}</td></tr>`;
+    html += `<tr><td>其他字符</td><td>${totalOther}</td></tr>`;
+    html += '</tbody></table>';
+    html += '</div>';
+
+    // Per-page details (collapsible)
+    html += '<details class="debug-section">';
+    html += '<summary>每页详细信息</summary>';
+    html += '<table><thead><tr><th>页</th><th>TextItem</th><th>中文</th><th>英文</th><th>数字</th><th>其他</th></tr></thead><tbody>';
+    for (const page of debugInfo.pages) {
+      html += `<tr><td>${page.pageNum}</td><td>${page.textItemCount}</td><td>${page.chineseCount}</td><td>${page.englishCount}</td><td>${page.digitCount}</td><td>${page.otherCount}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    html += '</details>';
+
+    debugContent.innerHTML = html;
+    debugPanel.hidden = false;
+  }
+
+  function hideDebugPanel() {
+    debugPanel.hidden = true;
+    debugContent.innerHTML = '';
+  }
+
+  function showChineseWarning(show: boolean) {
+    chineseWarning.hidden = !show;
+  }
+
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
     if (!file) return;
@@ -175,6 +278,8 @@ import Layout from '../../layouts/Layout.astro';
     }
     download.hidden = true;
     download.removeAttribute('href');
+    hideDebugPanel();
+    showChineseWarning(false);
     setStatus('loading', '正在解析PDF文件...');
     showProgress();
     setIndeterminate(true);
@@ -185,10 +290,19 @@ import Layout from '../../layouts/Layout.astro';
         data: buf,
         cMapUrl: '/pdf-extract/cmaps/',
         cMapPacked: true,
+        standardFontDataUrl: '/pdf-extract/standard_fonts/',
       }).promise;
 
       setIndeterminate(false);
       const pageBlocks: string[] = [];
+
+      // Debug info collection
+      const debugInfo: DebugInfo = {
+        fonts: [],
+        pages: [],
+        warnings: [],
+      };
+      const seenFonts = new Set<string>();
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const elapsedMs = extractionStartTime ? Date.now() - extractionStartTime : 0;
@@ -201,8 +315,40 @@ import Layout from '../../layouts/Layout.astro';
         const page = await pdf.getPage(pageNum);
         const content = await page.getTextContent();
         const items = content.items.filter((item) => 'str' in item) as TextItem[];
-        const pageText = normalizeText(assemblePageText(items));
-        pageBlocks.push(formatPageBlock(pageNum, pageText));
+
+        // Collect font info from content.styles
+        const styles = content.styles as Record<string, { fontFamily: string }>;
+        for (const [fontId, style] of Object.entries(styles)) {
+          if (!seenFonts.has(fontId)) {
+            seenFonts.add(fontId);
+            const fontName = style.fontFamily || fontId;
+            const fontInfo: FontInfo = {
+              name: fontName,
+              type: fontId.includes('+') ? 'embedded' : 'standard',
+            };
+            debugInfo.fonts.push(fontInfo);
+
+            // Check for warnings
+            const warnings = checkFontWarnings(fontName);
+            debugInfo.warnings.push(...warnings);
+          }
+        }
+
+        // Collect page stats
+        const pageText = assemblePageText(items);
+        const charCounts = countCharTypes(pageText);
+        const pageDebugInfo: PageDebugInfo = {
+          pageNum,
+          textItemCount: items.length,
+          chineseCount: charCounts.chinese,
+          englishCount: charCounts.english,
+          digitCount: charCounts.digits,
+          otherCount: charCounts.other,
+        };
+        debugInfo.pages.push(pageDebugInfo);
+
+        const normalizedText = normalizeText(pageText);
+        pageBlocks.push(formatPageBlock(pageNum, normalizedText));
       }
 
       const text = joinPages(pageBlocks);
@@ -211,6 +357,13 @@ import Layout from '../../layouts/Layout.astro';
       download.href = currentObjectUrl;
       download.download = file.name.replace(/\.pdf$/i, '') + '.txt';
       download.hidden = false;
+
+      // Show debug info
+      renderDebugInfo(debugInfo);
+
+      // Check for Chinese extraction issues and show warning if needed
+      const chineseAnalysis = analyzeChineseExtraction(debugInfo.pages);
+      showChineseWarning(chineseAnalysis.hasIssue);
 
       const totalElapsedMs = extractionStartTime ? Date.now() - extractionStartTime : 0;
       const timeText = totalElapsedMs >= 1000 ? `，用时 ${formatElapsedTime(totalElapsedMs)}` : '';
@@ -385,6 +538,153 @@ import Layout from '../../layouts/Layout.astro';
   }
   .download-btn[hidden] {
     display: none;
+  }
+
+  /* Chinese Warning */
+  .chinese-warning {
+    display: flex;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.4);
+    border-radius: 8px;
+  }
+  .chinese-warning[hidden] {
+    display: none;
+  }
+  .chinese-warning-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .chinese-warning-content {
+    flex: 1;
+  }
+  .chinese-warning h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    .chinese-warning h3 {
+      color: #fbbf24;
+    }
+  }
+  .chinese-warning p {
+    margin: 0 0 0.75rem;
+    font-size: 0.875rem;
+    color: var(--fg-muted);
+  }
+  .chinese-warning p:last-child {
+    margin-bottom: 0;
+  }
+  .chinese-warning ul {
+    margin: 0 0 0.75rem;
+    padding-left: 1.25rem;
+    font-size: 0.875rem;
+    color: var(--fg-muted);
+  }
+  .chinese-warning ul:last-child {
+    margin-bottom: 0;
+  }
+  .chinese-warning li {
+    margin: 0.25rem 0;
+  }
+  .chinese-warning strong {
+    color: var(--fg);
+  }
+
+  /* Debug Panel */
+  .debug-panel {
+    margin: 1.5rem 0 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.875rem;
+  }
+  .debug-panel[hidden] {
+    display: none;
+  }
+  .debug-panel summary {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--fg-muted);
+    user-select: none;
+  }
+  .debug-panel summary:hover {
+    color: var(--fg);
+  }
+  .debug-content {
+    padding: 0 1rem 1rem;
+  }
+  .debug-section {
+    margin: 0 0 1rem;
+  }
+  .debug-section:last-child {
+    margin-bottom: 0;
+  }
+  .debug-section h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--fg);
+  }
+  .debug-section--warning {
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 4px;
+    padding: 0.75rem;
+  }
+  .debug-section--warning h4 {
+    color: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    .debug-section--warning h4 {
+      color: #fbbf24;
+    }
+  }
+  .debug-section ul {
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+  .debug-section li {
+    margin: 0.25rem 0;
+    color: var(--fg-muted);
+  }
+  .debug-section code {
+    font-size: 0.8125rem;
+  }
+  .debug-section table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+  .debug-section th,
+  .debug-section td {
+    padding: 0.375rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .debug-section th {
+    font-weight: 600;
+    color: var(--fg-muted);
+  }
+  .debug-section td {
+    color: var(--fg);
+  }
+  .debug-section td:first-child {
+    color: var(--fg-muted);
+  }
+  .debug-section details {
+    margin: 0;
+  }
+  .debug-section details summary {
+    padding: 0.5rem 0;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--fg-muted);
   }
 
   /* Mobile adjustments */

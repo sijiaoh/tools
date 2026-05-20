@@ -14,6 +14,11 @@ export default defineConfig({
             dest: 'pdf-extract/cmaps',
             rename: { stripBase: true },
           },
+          {
+            src: 'node_modules/pdfjs-dist/standard_fonts/*',
+            dest: 'pdf-extract/standard_fonts',
+            rename: { stripBase: true },
+          },
         ],
       }),
     ],
