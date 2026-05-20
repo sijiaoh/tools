@@ -30,6 +30,13 @@ import Layout from '../../layouts/Layout.astro';
   import * as pdfjsLib from 'pdfjs-dist';
   // Vite-specific: produces a module Worker constructor bundled at build time.
   import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker';
+  import {
+    assemblePageText,
+    normalizeText,
+    formatPageBlock,
+    joinPages,
+    type TextItem,
+  } from './_lib/text-processing';
 
   pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
 
@@ -60,21 +67,14 @@ import Layout from '../../layouts/Layout.astro';
         status.textContent = `提取中：第 ${pageNum} / ${pdf.numPages} 页`;
         const page = await pdf.getPage(pageNum);
         const content = await page.getTextContent();
-        let pageText = '';
-        for (const item of content.items) {
-          if (!('str' in item)) continue;
-          pageText += item.str;
-          if ('hasEOL' in item && item.hasEOL) {
-            pageText += '\n';
-          } else {
-            pageText += ' ';
-          }
-        }
-        pageText = pageText.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-        pageBlocks.push(`=== Page ${pageNum} ===\n${pageText}`);
+        const items: TextItem[] = content.items.filter(
+          (item): item is TextItem => 'str' in item
+        );
+        const pageText = normalizeText(assemblePageText(items));
+        pageBlocks.push(formatPageBlock(pageNum, pageText));
       }
 
-      const text = pageBlocks.join('\n\n') + '\n';
+      const text = joinPages(pageBlocks);
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       currentObjectUrl = URL.createObjectURL(blob);
       download.href = currentObjectUrl;

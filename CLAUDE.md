@@ -11,18 +11,46 @@ Single-user project (sijiaoh). Optimise for:
 2. **Maintenance cost** — adding or removing a tool should touch the fewest files possible.
 3. **Fully static** — no backend, no first-party API, no build-time secrets. Persist per-tool state in `localStorage` if needed.
 
-> The Astro project itself has not been scaffolded yet. When initialising it, follow the conventions below rather than accepting whatever the starter generates.
-
 ## Commands
 
-Standard Astro scripts (defined in `package.json` once scaffolded):
+Standard Astro scripts (defined in `package.json`):
 
 - `npm run dev` — dev server at http://localhost:4321
 - `npm run build` — produce static output in `dist/`
 - `npm run preview` — serve the built output locally
 - `npx astro check` — type-check `.astro` files and TS
+- `npm test` — run tests once
+- `npm run test:watch` — run tests in watch mode
 
-There is no test suite by design; tools are small enough that manual verification in `dev` is the test. Don't add a runner unless a specific tool needs one.
+## Testing
+
+Tests use **Vitest**. The framework was chosen for native Vite/Astro integration and ESM/TypeScript support out of the box.
+
+### What to test
+
+Follow the test pyramid — prefer unit tests over integration and E2E:
+
+1. **Unit tests (primary focus)** — Pure business logic, data transformations, utility functions. These are fast, reliable, and cheap to maintain.
+2. **Component tests (selective)** — Astro components via Container API when component logic is non-trivial.
+3. **E2E tests (minimal)** — Only for critical user flows that can't be verified otherwise.
+
+Test files live next to source files: `src/pages/<slug>/_lib/foo.ts` → `src/pages/<slug>/_lib/foo.test.ts`.
+
+### What NOT to test
+
+- Browser APIs you don't control (File API, canvas internals, Web Workers)
+- Framework behavior (Astro rendering, hydration)
+- Simple pass-through code with no logic
+- Third-party library internals
+
+If a test requires complex mocks to work, reconsider whether the test is valuable. Extract pure functions from browser-dependent code instead of mocking the browser.
+
+### Key principles
+
+- **Coverage is not a goal.** Meaningful tests of critical logic beat high coverage numbers. Don't chase percentages.
+- **Test behavior, not implementation.** Focus on what the code does, not how it does it internally.
+- **Extract testable logic.** Separate pure functions from browser-dependent code. Test the pure functions; trust the browser APIs.
+- **Keep tests simple.** If a test is harder to understand than the code it tests, something is wrong.
 
 ## Architecture
 
