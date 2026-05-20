@@ -2,9 +2,10 @@
 interface Props {
   title?: string | undefined;
   description?: string | undefined;
+  lang?: string | undefined;
 }
 
-const { title, description } = Astro.props;
+const { title, description, lang = 'en' } = Astro.props;
 
 const siteTitle = 'tools.sijiaoh.com';
 const fullTitle = title ? `${title} — ${siteTitle}` : siteTitle;
@@ -12,7 +13,7 @@ const metaDescription = description ?? 'A personal collection of small web tools
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

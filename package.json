@@ -12,10 +12,12 @@
     "astro": "astro"
   },
   "dependencies": {
-    "astro": "^6.3.5"
+    "astro": "^6.3.5",
+    "pdfjs-dist": "^5.7.284"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "pdfkit": "^0.18.0",
     "typescript": "^6.0.3"
   }
 }

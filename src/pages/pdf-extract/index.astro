@@ -1,0 +1,125 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout
+  title="PDF文本提取"
+  description="仅在浏览器内从PDF提取文本并下载的工具"
+  lang="zh-CN"
+>
+  <h1>PDF文本提取</h1>
+  <p class="lead">
+    选择PDF文件后，将在浏览器内提取文本并下载为 <code>.txt</code>。
+    文件不会被上传到任何服务器。
+  </p>
+
+  <p class="sample">
+    用于测试：<a href="/pdf-extract/sample.pdf" download>下载示例PDF</a>
+  </p>
+
+  <label class="file-input">
+    <input id="pdf-input" type="file" accept="application/pdf" />
+  </label>
+
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+
+  <a id="download" class="download" hidden download>下载提取结果</a>
+</Layout>
+
+<script>
+  import * as pdfjsLib from 'pdfjs-dist';
+  // Vite-specific: produces a module Worker constructor bundled at build time.
+  import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker';
+
+  pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
+
+  const input = document.getElementById('pdf-input') as HTMLInputElement;
+  const status = document.getElementById('status') as HTMLParagraphElement;
+  const download = document.getElementById('download') as HTMLAnchorElement;
+
+  let currentObjectUrl: string | null = null;
+
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
+    download.hidden = true;
+    download.removeAttribute('href');
+    status.textContent = '加载中…';
+
+    try {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      const pageBlocks: string[] = [];
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        status.textContent = `提取中：第 ${pageNum} / ${pdf.numPages} 页`;
+        const page = await pdf.getPage(pageNum);
+        const content = await page.getTextContent();
+        let pageText = '';
+        for (const item of content.items) {
+          if (!('str' in item)) continue;
+          pageText += item.str;
+          if ('hasEOL' in item && item.hasEOL) {
+            pageText += '\n';
+          } else {
+            pageText += ' ';
+          }
+        }
+        pageText = pageText.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        pageBlocks.push(`=== Page ${pageNum} ===\n${pageText}`);
+      }
+
+      const text = pageBlocks.join('\n\n') + '\n';
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      currentObjectUrl = URL.createObjectURL(blob);
+      download.href = currentObjectUrl;
+      download.download = file.name.replace(/\.pdf$/i, '') + '.txt';
+      download.hidden = false;
+      status.textContent = `完成（共 ${pdf.numPages} 页）`;
+    } catch (e) {
+      status.textContent = `错误：${e instanceof Error ? e.message : String(e)}`;
+    }
+  });
+</script>
+
+<style>
+  h1 {
+    margin: 0 0 0.5rem;
+  }
+  .lead {
+    color: var(--fg-muted);
+    margin: 0 0 1.5rem;
+  }
+  .sample {
+    margin: 0 0 1.5rem;
+    font-size: 0.925rem;
+  }
+  .file-input {
+    display: block;
+    margin: 0 0 1rem;
+  }
+  .file-input input {
+    display: block;
+  }
+  .status {
+    min-height: 1.6em;
+    color: var(--fg-muted);
+    margin: 0 0 1rem;
+  }
+  .download {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+  }
+  .download:hover {
+    text-decoration: none;
+    background: var(--accent);
+    color: var(--bg);
+  }
+</style>
