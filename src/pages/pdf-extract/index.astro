@@ -29,6 +29,19 @@ import Layout from '../../layouts/Layout.astro';
 
   <p id="status" class="status" role="status" aria-live="polite"></p>
 
+  <div id="progress-container" class="progress-container" hidden>
+    <div
+      id="progress-bar"
+      class="progress-bar"
+      role="progressbar"
+      aria-valuenow="0"
+      aria-valuemin="0"
+      aria-valuemax="100"
+    >
+      <span id="progress-text" class="progress-text" aria-hidden="true">0%</span>
+    </div>
+  </div>
+
   <a id="download" class="download-btn" hidden download>下载提取结果 (.txt)</a>
 </Layout>
 
@@ -52,8 +65,12 @@ import Layout from '../../layouts/Layout.astro';
   const dropZone = document.getElementById('drop-zone') as HTMLLabelElement;
   const fileName = document.getElementById('file-name') as HTMLSpanElement;
   const dropZoneContent = dropZone.querySelector('.drop-zone-content') as HTMLSpanElement;
+  const progressContainer = document.getElementById('progress-container') as HTMLDivElement;
+  const progressBar = document.getElementById('progress-bar') as HTMLDivElement;
+  const progressText = document.getElementById('progress-text') as HTMLSpanElement;
 
   let currentObjectUrl: string | null = null;
+  let extractionStartTime: number | null = null;
 
   // Drag-and-drop events
   dropZone.addEventListener('dragover', (e) => {
@@ -89,6 +106,52 @@ import Layout from '../../layouts/Layout.astro';
     }
   }
 
+  function formatElapsedTime(ms: number): string {
+    const seconds = Math.round(ms / 1000);
+    if (seconds < 60) {
+      return `${seconds}秒`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}分${remainingSeconds}秒`;
+  }
+
+  function setProgress(percent: number, pagesProcessed?: number, elapsedMs?: number) {
+    progressBar.style.width = `${percent}%`;
+    progressBar.setAttribute('aria-valuenow', String(percent));
+
+    let displayText = `${percent}%`;
+
+    // Show pages per second for meaningful measurements (at least 2 pages and 500ms)
+    if (pagesProcessed !== undefined && elapsedMs !== undefined && pagesProcessed >= 2 && elapsedMs >= 500) {
+      const pagesPerSecond = (pagesProcessed / (elapsedMs / 1000)).toFixed(1);
+      displayText = `${percent}% · ${pagesPerSecond}页/秒`;
+    }
+
+    progressText.textContent = displayText;
+  }
+
+  function setIndeterminate(show: boolean) {
+    if (show) {
+      progressBar.classList.add('progress-bar--indeterminate');
+      progressBar.removeAttribute('aria-valuenow');
+      progressText.textContent = '';
+    } else {
+      progressBar.classList.remove('progress-bar--indeterminate');
+    }
+  }
+
+  function showProgress() {
+    progressContainer.hidden = false;
+    extractionStartTime = Date.now();
+    setProgress(0);
+  }
+
+  function hideProgress() {
+    progressContainer.hidden = true;
+    extractionStartTime = null;
+  }
+
   function updateFileDisplay(file: File) {
     fileName.textContent = file.name;
     fileName.hidden = false;
@@ -112,15 +175,25 @@ import Layout from '../../layouts/Layout.astro';
     }
     download.hidden = true;
     download.removeAttribute('href');
-    setStatus('loading', '加载中…');
+    setStatus('loading', '正在解析PDF文件...');
+    showProgress();
+    setIndeterminate(true);
 
     try {
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+
+      setIndeterminate(false);
       const pageBlocks: string[] = [];
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        setStatus('loading', `提取中：第 ${pageNum} / ${pdf.numPages} 页`);
+        const elapsedMs = extractionStartTime ? Date.now() - extractionStartTime : 0;
+        const elapsedText = elapsedMs >= 1000 ? ` · 已用时: ${formatElapsedTime(elapsedMs)}` : '';
+        setStatus('loading', `提取中：第 ${pageNum} / ${pdf.numPages} 页${elapsedText}`);
+
+        const percent = Math.round((pageNum / pdf.numPages) * 100);
+        setProgress(percent, pageNum, elapsedMs);
+
         const page = await pdf.getPage(pageNum);
         const content = await page.getTextContent();
         const items = content.items.filter((item) => 'str' in item) as TextItem[];
@@ -134,8 +207,13 @@ import Layout from '../../layouts/Layout.astro';
       download.href = currentObjectUrl;
       download.download = file.name.replace(/\.pdf$/i, '') + '.txt';
       download.hidden = false;
-      setStatus('success', `完成（共 ${pdf.numPages} 页）`);
+
+      const totalElapsedMs = extractionStartTime ? Date.now() - extractionStartTime : 0;
+      const timeText = totalElapsedMs >= 1000 ? `，用时 ${formatElapsedTime(totalElapsedMs)}` : '';
+      hideProgress();
+      setStatus('success', `完成（共 ${pdf.numPages} 页${timeText}）`);
     } catch (e) {
+      hideProgress();
       setStatus('error', `错误：${e instanceof Error ? e.message : String(e)}`);
       resetFileDisplay();
     }
@@ -235,6 +313,55 @@ import Layout from '../../layouts/Layout.astro';
   }
   .status--error {
     color: var(--color-error);
+  }
+
+  /* Progress Bar */
+  .progress-container {
+    width: 100%;
+    max-width: 400px;
+    height: 24px;
+    background-color: var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 0 0 1rem;
+  }
+  .progress-container[hidden] {
+    display: none;
+  }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: width 0.2s ease;
+    min-width: 5rem;
+  }
+  .progress-bar--indeterminate {
+    width: 100%;
+    background: linear-gradient(
+      90deg,
+      var(--border) 0%,
+      var(--accent) 50%,
+      var(--border) 100%
+    );
+    background-size: 200% 100%;
+    animation: indeterminate 1.5s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+  .progress-text {
+    color: var(--bg);
+    font-size: 0.75rem;
+    font-weight: 600;
   }
 
   /* Download Button */
