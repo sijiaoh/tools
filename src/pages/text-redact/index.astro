@@ -1,0 +1,414 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout
+  title="敏感信息掩蔽"
+  description="在浏览器内对文本进行脱敏处理，文件不会上传到任何服务器"
+  lang="zh-CN"
+>
+  <h1>敏感信息掩蔽</h1>
+  <p class="lead">
+    在浏览器内对文本进行脱敏处理，文件不会上传到任何服务器。
+  </p>
+
+  <section class="section">
+    <label for="input-text" class="label">原文</label>
+    <div class="textarea-wrapper">
+      <textarea
+        id="input-text"
+        class="textarea"
+        placeholder="在此粘贴需要脱敏的文本..."
+      ></textarea>
+      <button id="clear-btn" class="clear-btn" type="button" hidden aria-label="清除文本">×</button>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="label">掩蔽设置</div>
+
+    <div class="subsection">
+      <div class="subsection-label">快捷选项</div>
+      <label class="checkbox-label">
+        <input type="checkbox" id="mask-numbers" />
+        <span class="checkbox-content">
+          <span class="checkbox-text">掩蔽数字</span>
+          <span class="checkbox-hint">例：1,234,567 → ***</span>
+        </span>
+      </label>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">自定义掩蔽词</div>
+      <div class="word-input-row">
+        <input
+          type="text"
+          id="word-input"
+          class="word-input"
+          placeholder="输入要掩蔽的词语..."
+        />
+        <button type="button" id="add-word-btn" class="btn-secondary">添加</button>
+      </div>
+      <div id="word-tags" class="word-tags"></div>
+      <p id="duplicate-warning" class="warning" hidden role="alert">该词语已添加</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <label for="output-text" class="label">处理结果</label>
+    <textarea
+      id="output-text"
+      class="textarea textarea--readonly"
+      readonly
+      placeholder="（处理后的文本将显示在这里）"
+    ></textarea>
+    <button type="button" id="copy-btn" class="btn-primary" disabled>
+      <span id="copy-icon">📋</span>
+      <span id="copy-text">复制处理结果</span>
+    </button>
+  </section>
+</Layout>
+
+<script>
+  import { redact, type RedactOptions } from './_lib/redact';
+
+  // Elements
+  const inputText = document.getElementById('input-text') as HTMLTextAreaElement;
+  const outputText = document.getElementById('output-text') as HTMLTextAreaElement;
+  const clearBtn = document.getElementById('clear-btn') as HTMLButtonElement;
+  const maskNumbers = document.getElementById('mask-numbers') as HTMLInputElement;
+  const wordInput = document.getElementById('word-input') as HTMLInputElement;
+  const addWordBtn = document.getElementById('add-word-btn') as HTMLButtonElement;
+  const wordTags = document.getElementById('word-tags') as HTMLDivElement;
+  const duplicateWarning = document.getElementById('duplicate-warning') as HTMLParagraphElement;
+  const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
+  const copyIcon = document.getElementById('copy-icon') as HTMLSpanElement;
+  const copyText = document.getElementById('copy-text') as HTMLSpanElement;
+
+  // State
+  let customWords: string[] = [];
+  let debounceTimer: number | null = null;
+
+  // Debounced processing
+  function scheduleProcess() {
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = window.setTimeout(processText, 150);
+  }
+
+  function processText() {
+    const options: RedactOptions = {
+      customWords,
+      maskNumbers: maskNumbers.checked,
+    };
+
+    const result = redact(inputText.value, options);
+    outputText.value = result;
+
+    // Update copy button state
+    copyBtn.disabled = !result;
+  }
+
+  // Clear button visibility
+  function updateClearButton() {
+    clearBtn.hidden = !inputText.value;
+  }
+
+  // Word tag management
+  function addWord(word: string) {
+    const trimmed = word.trim();
+    if (!trimmed) return;
+
+    if (customWords.includes(trimmed)) {
+      // Show duplicate warning
+      duplicateWarning.hidden = false;
+      setTimeout(() => {
+        duplicateWarning.hidden = true;
+      }, 2000);
+      return;
+    }
+
+    customWords.push(trimmed);
+    renderTags();
+    wordInput.value = '';
+    scheduleProcess();
+  }
+
+  function removeWord(word: string) {
+    customWords = customWords.filter((w) => w !== word);
+    renderTags();
+    scheduleProcess();
+  }
+
+  function renderTags() {
+    wordTags.innerHTML = '';
+    for (const word of customWords) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.innerHTML = `${escapeHtml(word)} <button type="button" class="tag-remove" aria-label="移除 ${escapeHtml(word)}">×</button>`;
+      tag.querySelector('.tag-remove')!.addEventListener('click', () => removeWord(word));
+      wordTags.appendChild(tag);
+    }
+  }
+
+  function escapeHtml(str: string): string {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Copy functionality
+  async function copyResult() {
+    try {
+      await navigator.clipboard.writeText(outputText.value);
+      copyIcon.textContent = '✓';
+      copyText.textContent = '已复制';
+      setTimeout(() => {
+        copyIcon.textContent = '📋';
+        copyText.textContent = '复制处理结果';
+      }, 1500);
+    } catch {
+      // Fallback for older browsers
+      outputText.select();
+      document.execCommand('copy');
+    }
+  }
+
+  // Event listeners
+  inputText.addEventListener('input', () => {
+    updateClearButton();
+    scheduleProcess();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputText.value = '';
+    updateClearButton();
+    scheduleProcess();
+    inputText.focus();
+  });
+
+  maskNumbers.addEventListener('change', scheduleProcess);
+
+  addWordBtn.addEventListener('click', () => addWord(wordInput.value));
+
+  wordInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addWord(wordInput.value);
+    }
+  });
+
+  copyBtn.addEventListener('click', copyResult);
+
+  // Initial state
+  updateClearButton();
+</script>
+
+<style>
+  h1 {
+    margin: 0 0 0.5rem;
+  }
+  .lead {
+    color: var(--fg-muted);
+    margin: 0 0 1.5rem;
+  }
+
+  .section {
+    margin-bottom: 1.5rem;
+  }
+
+  .label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+
+  .subsection {
+    margin-bottom: 1rem;
+  }
+  .subsection-label {
+    font-size: 0.875rem;
+    color: var(--fg-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Textarea */
+  .textarea-wrapper {
+    position: relative;
+  }
+  .textarea {
+    width: 100%;
+    min-height: 150px;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.925rem;
+    line-height: 1.6;
+    resize: vertical;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  .textarea:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .textarea--readonly {
+    background-color: var(--border);
+    cursor: default;
+  }
+
+  /* Clear button */
+  .clear-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: none;
+    background: var(--border);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--fg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .clear-btn:hover {
+    background: var(--fg-muted);
+    color: var(--bg);
+  }
+  .clear-btn[hidden] {
+    display: none;
+  }
+
+  /* Checkbox */
+  .checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+  .checkbox-label input[type='checkbox'] {
+    margin-top: 0.2rem;
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--accent);
+  }
+  .checkbox-content {
+    display: flex;
+    flex-direction: column;
+  }
+  .checkbox-text {
+    color: var(--fg);
+  }
+  .checkbox-hint {
+    font-size: 0.875rem;
+    color: var(--fg-muted);
+  }
+
+  /* Word input */
+  .word-input-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .word-input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.925rem;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  .word-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  /* Word tags */
+  .word-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--border);
+    border-radius: 4px;
+    font-size: 0.875rem;
+  }
+  .tag-remove {
+    border: none;
+    background: none;
+    cursor: pointer;
+    opacity: 0.6;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--fg);
+  }
+  .tag-remove:hover {
+    opacity: 1;
+  }
+
+  /* Warning */
+  .warning {
+    font-size: 0.875rem;
+    color: var(--color-warning);
+    margin: 0.5rem 0 0;
+  }
+  .warning[hidden] {
+    display: none;
+  }
+
+  /* Buttons */
+  .btn-secondary {
+    padding: 0.5rem 1rem;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.925rem;
+    cursor: pointer;
+  }
+  .btn-secondary:hover {
+    background: var(--border);
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 0.75rem;
+  }
+  .btn-primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 639px) {
+    .btn-primary {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
