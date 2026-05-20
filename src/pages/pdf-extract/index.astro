@@ -70,8 +70,8 @@ import Layout from '../../layouts/Layout.astro';
     e.preventDefault();
     dropZone.classList.remove('drag-over');
     const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-      const file = files[0];
+    const file = files?.[0];
+    if (file) {
       if (file.type === 'application/pdf') {
         input.files = files;
         input.dispatchEvent(new Event('change'));
@@ -123,9 +123,7 @@ import Layout from '../../layouts/Layout.astro';
         setStatus('loading', `提取中：第 ${pageNum} / ${pdf.numPages} 页`);
         const page = await pdf.getPage(pageNum);
         const content = await page.getTextContent();
-        const items: TextItem[] = content.items.filter(
-          (item): item is TextItem => 'str' in item
-        );
+        const items = content.items.filter((item) => 'str' in item) as TextItem[];
         const pageText = normalizeText(assemblePageText(items));
         pageBlocks.push(formatPageBlock(pageNum, pageText));
       }

@@ -3,7 +3,7 @@
  * These are extracted from the component for testability.
  */
 
-/** Item from pdfjs TextContent with string data */
+/** Minimal text item interface for text assembly (subset of pdfjs TextItem) */
 export interface TextItem {
   str: string;
   hasEOL?: boolean;
