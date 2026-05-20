@@ -315,9 +315,65 @@ This tool can be implemented with pure Astro + vanilla JS:
 ### Privacy
 - All processing happens in the browser
 - No data sent to server
-- localStorage not required (stateless tool)
 
-## Future Considerations (Out of Scope for v1)
+### Persistence (v2)
+Custom masking words are persisted to localStorage to survive page refreshes. This is a user-requested feature to prevent data loss when working with multiple sensitive terms.
+
+**Storage:**
+- Key: `text-redact-custom-words`
+- Value: JSON array of strings
+- Load on page init, save on every change
+
+**Clear All:**
+- A "清除全部" (Clear All) button appears when there are saved words
+- Single click clears all words immediately (no confirmation needed for simplicity)
+
+## Custom Words Input Enhancement (v2)
+
+### Batch Import via Textarea
+
+Replace the single-line input with a multi-line textarea to support batch import of masking words.
+
+**UI:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 自定义掩蔽词                                                    │
+│                                                                 │
+│ ┌─────────────────────────────────────────────────────────────┐ │
+│ │ 输入要掩蔽的词语，每行一个...                                 │ │
+│ │                                                             │ │
+│ │                                                             │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ ┌──────┐  ┌──────────┐                                         │
+│ │ 添加 │  │ 清除全部 │                                          │
+│ └──────┘  └──────────┘                                         │
+│                                                                 │
+│ ┌────────┐  ┌────────┐  ┌────────┐                             │
+│ │ 张三 × │  │ 李四 × │  │ ABC公司 ×│                            │
+│ └────────┘  └────────┘  └────────┘                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Interaction:**
+- Textarea allows multi-line input (one word per line)
+- "添加" button processes all lines, adding each non-empty line as a word
+- Duplicate words are silently skipped (no warning needed for batch operations)
+- After adding, textarea is cleared
+- Enter key in textarea creates a new line (does not trigger add)
+- "清除全部" button removes all words and clears localStorage
+- "清除全部" button is hidden when there are no words
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Empty lines in input | Skipped silently |
+| Whitespace-only lines | Skipped silently |
+| Duplicate words in batch | Added once, duplicates skipped |
+| Mix of new and existing words | Only new words added |
+
+## Future Considerations (Out of Scope for v3+)
 
 The following features could be added later based on user feedback:
 

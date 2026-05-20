@@ -40,17 +40,25 @@ import Layout from '../../layouts/Layout.astro';
 
     <div class="subsection">
       <div class="subsection-label">自定义掩蔽词</div>
-      <div class="word-input-row">
-        <input
-          type="text"
+      <div class="word-input-container">
+        <textarea
           id="word-input"
-          class="word-input"
-          placeholder="输入要掩蔽的词语..."
-        />
-        <button type="button" id="add-word-btn" class="btn-secondary">添加</button>
+          class="word-input-textarea"
+          placeholder="输入要掩蔽的词语，每行一个..."
+          rows="3"
+        ></textarea>
       </div>
-      <div id="word-tags" class="word-tags"></div>
-      <p id="duplicate-warning" class="warning" hidden role="alert">该词语已添加</p>
+      <div class="word-buttons-row">
+        <button type="button" id="add-word-btn" class="btn-secondary">添加</button>
+        <button type="button" id="clear-all-btn" class="clear-all-btn" hidden>清除全部</button>
+      </div>
+      <div id="word-tags-section" class="word-tags-section" hidden>
+        <div class="word-tags-header">
+          <span id="word-count" class="word-count">已添加 (0)</span>
+        </div>
+        <div id="word-tags" class="word-tags"></div>
+      </div>
+      <p id="word-message" class="word-message" hidden role="status" aria-live="polite"></p>
     </div>
   </section>
 
@@ -79,15 +87,21 @@ import Layout from '../../layouts/Layout.astro';
 <script>
   import { redact, type RedactOptions } from './_lib/redact';
 
+  // Constants
+  const STORAGE_KEY = 'text-redact-custom-words';
+
   // Elements
   const inputText = document.getElementById('input-text') as HTMLTextAreaElement;
   const outputText = document.getElementById('output-text') as HTMLTextAreaElement;
   const clearBtn = document.getElementById('clear-btn') as HTMLButtonElement;
   const maskNumbers = document.getElementById('mask-numbers') as HTMLInputElement;
-  const wordInput = document.getElementById('word-input') as HTMLInputElement;
+  const wordInput = document.getElementById('word-input') as HTMLTextAreaElement;
   const addWordBtn = document.getElementById('add-word-btn') as HTMLButtonElement;
+  const clearAllBtn = document.getElementById('clear-all-btn') as HTMLButtonElement;
+  const wordTagsSection = document.getElementById('word-tags-section') as HTMLDivElement;
   const wordTags = document.getElementById('word-tags') as HTMLDivElement;
-  const duplicateWarning = document.getElementById('duplicate-warning') as HTMLParagraphElement;
+  const wordCount = document.getElementById('word-count') as HTMLSpanElement;
+  const wordMessage = document.getElementById('word-message') as HTMLParagraphElement;
   const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
   const copyIcon = document.getElementById('copy-icon') as HTMLSpanElement;
   const copyText = document.getElementById('copy-text') as HTMLSpanElement;
@@ -96,6 +110,49 @@ import Layout from '../../layouts/Layout.astro';
   // State
   let customWords: string[] = [];
   let debounceTimer: number | null = null;
+  let messageTimer: number | null = null;
+
+  // localStorage helpers
+  function saveWords() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(customWords));
+    } catch {
+      showMessage('存储空间不足，请清理部分词语', 'error');
+    }
+  }
+
+  function loadWords(): string[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {
+      showMessage('浏览器存储不可用，词语将在刷新后丢失', 'warning');
+    }
+    return [];
+  }
+
+  function clearStoredWords() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Silently ignore
+    }
+  }
+
+  // Message display helper
+  function showMessage(text: string, type: 'success' | 'warning' | 'error' = 'success') {
+    if (messageTimer !== null) {
+      clearTimeout(messageTimer);
+    }
+    wordMessage.textContent = text;
+    wordMessage.className = `word-message word-message--${type}`;
+    wordMessage.hidden = false;
+    messageTimer = window.setTimeout(() => {
+      wordMessage.hidden = true;
+    }, 3000);
+  }
 
   // Dynamic debounce time based on text length
   function getDebounceTime(textLength: number): number {
@@ -144,32 +201,73 @@ import Layout from '../../layouts/Layout.astro';
   }
 
   // Word tag management
-  function addWord(word: string) {
-    const trimmed = word.trim();
-    if (!trimmed) return;
+  function addWords() {
+    const lines = wordInput.value.split('\n');
+    const wordsToAdd: string[] = [];
+    let skippedDuplicates = 0;
 
-    if (customWords.includes(trimmed)) {
-      // Show duplicate warning
-      duplicateWarning.hidden = false;
-      setTimeout(() => {
-        duplicateWarning.hidden = true;
-      }, 2000);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (customWords.includes(trimmed) || wordsToAdd.includes(trimmed)) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      wordsToAdd.push(trimmed);
+    }
+
+    if (wordsToAdd.length === 0 && skippedDuplicates === 0) {
+      showMessage('请输入至少一个词语', 'warning');
       return;
     }
 
-    customWords.push(trimmed);
+    if (wordsToAdd.length === 0 && skippedDuplicates > 0) {
+      showMessage('所有词语都已存在', 'warning');
+      return;
+    }
+
+    customWords.push(...wordsToAdd);
+    saveWords();
     renderTags();
     wordInput.value = '';
     scheduleProcess();
+
+    if (skippedDuplicates > 0) {
+      showMessage(`已添加 ${wordsToAdd.length} 个词语，跳过 ${skippedDuplicates} 个重复`, 'success');
+    } else {
+      showMessage(`已添加 ${wordsToAdd.length} 个词语`, 'success');
+    }
   }
 
   function removeWord(word: string) {
     customWords = customWords.filter((w) => w !== word);
+    saveWords();
+    renderTags();
+    scheduleProcess();
+  }
+
+  function clearAllWords() {
+    if (!confirm('确定要清除所有已保存的掩蔽词吗？此操作无法撤销。')) {
+      return;
+    }
+    customWords = [];
+    clearStoredWords();
     renderTags();
     scheduleProcess();
   }
 
   function renderTags() {
+    // Update word tags section visibility
+    const hasWords = customWords.length > 0;
+    wordTagsSection.hidden = !hasWords;
+    clearAllBtn.hidden = !hasWords;
+
+    // Update word count
+    wordCount.textContent = `已添加 (${customWords.length})`;
+
+    // Render tags
     wordTags.innerHTML = '';
     for (const word of customWords) {
       const tag = document.createElement('span');
@@ -218,19 +316,21 @@ import Layout from '../../layouts/Layout.astro';
 
   maskNumbers.addEventListener('change', scheduleProcess);
 
-  addWordBtn.addEventListener('click', () => addWord(wordInput.value));
+  addWordBtn.addEventListener('click', addWords);
 
-  wordInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addWord(wordInput.value);
-    }
-  });
+  clearAllBtn.addEventListener('click', clearAllWords);
 
   copyBtn.addEventListener('click', copyResult);
 
+  // Load saved words on init
+  customWords = loadWords();
+  renderTags();
+
   // Initial state
   updateClearButton();
+  if (customWords.length > 0) {
+    scheduleProcess();
+  }
 </script>
 
 <style>
@@ -339,23 +439,62 @@ import Layout from '../../layouts/Layout.astro';
   }
 
   /* Word input */
-  .word-input-row {
-    display: flex;
-    gap: 0.5rem;
+  .word-input-container {
     margin-bottom: 0.5rem;
   }
-  .word-input {
-    flex: 1;
+  .word-input-textarea {
+    width: 100%;
+    min-height: 80px;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--border);
     border-radius: 6px;
+    font-family: inherit;
     font-size: 0.925rem;
+    line-height: 1.5;
+    resize: vertical;
     background: var(--bg);
     color: var(--fg);
   }
-  .word-input:focus {
+  .word-input-textarea:focus {
     outline: 2px solid var(--accent);
     outline-offset: -1px;
+  }
+
+  .word-buttons-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .clear-all-btn {
+    background: none;
+    border: none;
+    color: var(--fg-muted);
+    font-size: 0.875rem;
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+  }
+  .clear-all-btn:hover {
+    color: var(--color-error);
+    text-decoration: underline;
+  }
+  .clear-all-btn[hidden] {
+    display: none;
+  }
+
+  /* Word tags section */
+  .word-tags-section {
+    margin-top: 0.5rem;
+  }
+  .word-tags-section[hidden] {
+    display: none;
+  }
+  .word-tags-header {
+    margin-bottom: 0.5rem;
+  }
+  .word-count {
+    font-size: 0.875rem;
+    color: var(--fg-muted);
   }
 
   /* Word tags */
@@ -387,14 +526,22 @@ import Layout from '../../layouts/Layout.astro';
     opacity: 1;
   }
 
-  /* Warning */
-  .warning {
+  /* Message */
+  .word-message {
     font-size: 0.875rem;
-    color: var(--color-warning);
     margin: 0.5rem 0 0;
   }
-  .warning[hidden] {
+  .word-message[hidden] {
     display: none;
+  }
+  .word-message--success {
+    color: var(--color-success);
+  }
+  .word-message--warning {
+    color: var(--color-warning);
+  }
+  .word-message--error {
+    color: var(--color-error);
   }
 
   /* Buttons */
