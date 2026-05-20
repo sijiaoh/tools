@@ -17,6 +17,13 @@ import { tools } from '../tools';
             <a href={`/${tool.slug}/`}>
               <span class="title">{tool.title}</span>
               <span class="desc">{tool.description}</span>
+              {tool.tags && tool.tags.length > 0 && (
+                <span class="tags">
+                  {tool.tags.map((tag) => (
+                    <span class="tag">{tag}</span>
+                  ))}
+                </span>
+              )}
             </a>
           </li>
         ))}
@@ -41,7 +48,8 @@ import { tools } from '../tools';
     padding: 0;
     margin: 0;
     display: grid;
-    gap: 0.75rem;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   }
   .tool-list a {
     display: block;
@@ -65,5 +73,19 @@ import { tools } from '../tools';
     color: var(--fg-muted);
     font-size: 0.925rem;
     margin-top: 0.25rem;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    background: var(--border);
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
   }
 </style>
