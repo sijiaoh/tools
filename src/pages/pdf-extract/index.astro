@@ -181,7 +181,11 @@ import Layout from '../../layouts/Layout.astro';
 
     try {
       const buf = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      const pdf = await pdfjsLib.getDocument({
+        data: buf,
+        cMapUrl: '/pdf-extract/cmaps/',
+        cMapPacked: true,
+      }).promise;
 
       setIndeterminate(false);
       const pageBlocks: string[] = [];
