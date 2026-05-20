@@ -1,0 +1,111 @@
+---
+interface Props {
+  title?: string | undefined;
+  description?: string | undefined;
+}
+
+const { title, description } = Astro.props;
+
+const siteTitle = 'tools.sijiaoh.com';
+const fullTitle = title ? `${title} — ${siteTitle}` : siteTitle;
+const metaDescription = description ?? 'A personal collection of small web tools.';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={metaDescription} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <title>{fullTitle}</title>
+  </head>
+  <body>
+    <header>
+      <a href="/" class="site-title">{siteTitle}</a>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer>
+      <a href="https://github.com/sijiaoh" target="_blank" rel="noopener">github.com/sijiaoh</a>
+    </footer>
+    <style is:global>
+      :root {
+        color-scheme: light dark;
+        --fg: #1a1a1a;
+        --fg-muted: #555;
+        --bg: #fafafa;
+        --accent: #2563eb;
+        --border: #e5e5e5;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e8e8e8;
+          --fg-muted: #a0a0a0;
+          --bg: #0f0f0f;
+          --accent: #60a5fa;
+          --border: #262626;
+        }
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+        line-height: 1.6;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+    </style>
+    <style>
+      header,
+      footer {
+        max-width: 720px;
+        width: 100%;
+        margin: 0 auto;
+        padding: 1.5rem 1.25rem;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+      }
+      footer {
+        border-top: 1px solid var(--border);
+        color: var(--fg-muted);
+        font-size: 0.875rem;
+        margin-top: auto;
+      }
+      main {
+        max-width: 720px;
+        width: 100%;
+        margin: 0 auto;
+        padding: 2rem 1.25rem;
+        flex: 1;
+      }
+      .site-title {
+        font-weight: 600;
+        color: var(--fg);
+      }
+    </style>
+  </body>
+</html>
