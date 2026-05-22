@@ -2,9 +2,12 @@
 import { defineConfig } from 'astro/config';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
+import cloudflare from '@astrojs/cloudflare';
+
 // https://astro.build/config
 export default defineConfig({
   site: 'https://tools.sijiaoh.com',
+
   vite: {
     plugins: [
       viteStaticCopy({
@@ -23,4 +26,6 @@ export default defineConfig({
       }),
     ],
   },
+
+  adapter: cloudflare(),
 });

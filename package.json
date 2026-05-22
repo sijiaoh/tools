@@ -8,12 +8,15 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
+    "preview": "npm run build && wrangler dev",
     "astro": "astro",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "generate-types": "wrangler types",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "^13.5.4",
     "astro": "^6.3.5",
     "pdfjs-dist": "^5.7.284"
   },
@@ -22,6 +25,10 @@
     "pdfkit": "^0.18.0",
     "typescript": "^6.0.3",
     "vite-plugin-static-copy": "^4.1.0",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "wrangler": "^4.94.0"
+  },
+  "overrides": {
+    "vite": "^7"
   }
 }
