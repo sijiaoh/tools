@@ -44,24 +44,6 @@ import Layout from '../../layouts/Layout.astro';
 
   <a id="download" class="download-btn" hidden download>下载提取结果 (.txt)</a>
 
-  <div id="chinese-warning" class="chinese-warning" hidden>
-    <div class="chinese-warning-icon">⚠️</div>
-    <div class="chinese-warning-content">
-      <h3>中文提取可能不完整</h3>
-      <p>检测到提取的文本中中文字符比例异常低，可能存在以下情况：</p>
-      <ul>
-        <li><strong>嵌入字体编码问题</strong>：PDF使用了特殊编码的嵌入字体，导致中文无法正确解析</li>
-        <li><strong>字体未正确嵌入</strong>：PDF创建时字体信息丢失或损坏</li>
-      </ul>
-      <p><strong>建议尝试：</strong></p>
-      <ul>
-        <li>使用其他PDF阅读器（如Adobe Acrobat）打开并重新导出</li>
-        <li>如果是您自己生成的PDF，请确保在导出时选择"嵌入所有字体"或使用标准字体</li>
-        <li>尝试使用OCR工具识别PDF中的文字</li>
-      </ul>
-    </div>
-  </div>
-
   <details id="debug-panel" class="debug-panel" hidden>
     <summary>调试信息</summary>
     <div id="debug-content" class="debug-content"></div>
@@ -79,7 +61,6 @@ import Layout from '../../layouts/Layout.astro';
     joinPages,
     countCharTypes,
     checkFontWarnings,
-    analyzeChineseExtraction,
     type TextItem,
     type DebugInfo,
     type FontInfo,
@@ -99,7 +80,6 @@ import Layout from '../../layouts/Layout.astro';
   const progressText = document.getElementById('progress-text') as HTMLSpanElement;
   const debugPanel = document.getElementById('debug-panel') as HTMLDetailsElement;
   const debugContent = document.getElementById('debug-content') as HTMLDivElement;
-  const chineseWarning = document.getElementById('chinese-warning') as HTMLDivElement;
 
   let currentObjectUrl: string | null = null;
   let extractionStartTime: number | null = null;
@@ -262,10 +242,6 @@ import Layout from '../../layouts/Layout.astro';
     debugContent.innerHTML = '';
   }
 
-  function showChineseWarning(show: boolean) {
-    chineseWarning.hidden = !show;
-  }
-
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
     if (!file) return;
@@ -279,7 +255,6 @@ import Layout from '../../layouts/Layout.astro';
     download.hidden = true;
     download.removeAttribute('href');
     hideDebugPanel();
-    showChineseWarning(false);
     setStatus('loading', '正在解析PDF文件...');
     showProgress();
     setIndeterminate(true);
@@ -360,10 +335,6 @@ import Layout from '../../layouts/Layout.astro';
 
       // Show debug info
       renderDebugInfo(debugInfo);
-
-      // Check for Chinese extraction issues and show warning if needed
-      const chineseAnalysis = analyzeChineseExtraction(debugInfo.pages);
-      showChineseWarning(chineseAnalysis.hasIssue);
 
       const totalElapsedMs = extractionStartTime ? Date.now() - extractionStartTime : 0;
       const timeText = totalElapsedMs >= 1000 ? `，用时 ${formatElapsedTime(totalElapsedMs)}` : '';
@@ -538,62 +509,6 @@ import Layout from '../../layouts/Layout.astro';
   }
   .download-btn[hidden] {
     display: none;
-  }
-
-  /* Chinese Warning */
-  .chinese-warning {
-    display: flex;
-    gap: 1rem;
-    margin: 1.5rem 0;
-    padding: 1rem;
-    background: rgba(234, 179, 8, 0.1);
-    border: 1px solid rgba(234, 179, 8, 0.4);
-    border-radius: 8px;
-  }
-  .chinese-warning[hidden] {
-    display: none;
-  }
-  .chinese-warning-icon {
-    font-size: 1.5rem;
-    line-height: 1;
-    flex-shrink: 0;
-  }
-  .chinese-warning-content {
-    flex: 1;
-  }
-  .chinese-warning h3 {
-    margin: 0 0 0.5rem;
-    font-size: 1rem;
-    font-weight: 600;
-    color: #b45309;
-  }
-  @media (prefers-color-scheme: dark) {
-    .chinese-warning h3 {
-      color: #fbbf24;
-    }
-  }
-  .chinese-warning p {
-    margin: 0 0 0.75rem;
-    font-size: 0.875rem;
-    color: var(--fg-muted);
-  }
-  .chinese-warning p:last-child {
-    margin-bottom: 0;
-  }
-  .chinese-warning ul {
-    margin: 0 0 0.75rem;
-    padding-left: 1.25rem;
-    font-size: 0.875rem;
-    color: var(--fg-muted);
-  }
-  .chinese-warning ul:last-child {
-    margin-bottom: 0;
-  }
-  .chinese-warning li {
-    margin: 0.25rem 0;
-  }
-  .chinese-warning strong {
-    color: var(--fg);
   }
 
   /* Debug Panel */

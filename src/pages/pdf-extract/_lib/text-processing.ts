@@ -76,67 +76,6 @@ export function checkFontWarnings(fontName: string): string[] {
   return warnings;
 }
 
-/** Result of Chinese extraction analysis */
-export interface ChineseExtractionAnalysis {
-  /** Whether a potential Chinese extraction issue was detected */
-  hasIssue: boolean;
-  /** Total number of meaningful characters (excluding whitespace) */
-  totalMeaningfulChars: number;
-  /** Number of Chinese characters extracted */
-  chineseChars: number;
-  /** Ratio of Chinese characters to total meaningful characters */
-  chineseRatio: number;
-}
-
-/**
- * Analyzes extracted text to detect potential Chinese character extraction issues.
- * Returns analysis result indicating if there's a likely problem.
- *
- * Detection heuristic:
- * - If there are very few meaningful characters overall, no issue is flagged
- * - If Chinese characters make up less than 5% of total characters when
- *   there are significant non-whitespace characters, it suggests extraction failure
- */
-export function analyzeChineseExtraction(
-  pages: PageDebugInfo[]
-): ChineseExtractionAnalysis {
-  const totalChinese = pages.reduce((sum, p) => sum + p.chineseCount, 0);
-  const totalEnglish = pages.reduce((sum, p) => sum + p.englishCount, 0);
-  const totalDigits = pages.reduce((sum, p) => sum + p.digitCount, 0);
-  const totalOther = pages.reduce((sum, p) => sum + p.otherCount, 0);
-
-  const totalMeaningfulChars = totalChinese + totalEnglish + totalDigits + totalOther;
-
-  // If there are very few characters overall, don't flag an issue
-  if (totalMeaningfulChars < 50) {
-    return {
-      hasIssue: false,
-      totalMeaningfulChars,
-      chineseChars: totalChinese,
-      chineseRatio: totalMeaningfulChars > 0 ? totalChinese / totalMeaningfulChars : 0,
-    };
-  }
-
-  const chineseRatio = totalChinese / totalMeaningfulChars;
-  const otherRatio = totalOther / totalMeaningfulChars;
-
-  // Detect potential Chinese extraction failure:
-  // - Chinese ratio is very low (< 5%)
-  // - "Other" characters make up a significant portion (> 20%) - this suggests
-  //   Chinese characters were extracted as symbols/replacement characters
-  // - There are more "other" characters than Chinese characters
-  // This heuristic avoids flagging pure English documents while catching
-  // documents where Chinese text was converted to garbled symbols
-  const hasIssue = chineseRatio < 0.05 && otherRatio > 0.2 && totalOther > totalChinese;
-
-  return {
-    hasIssue,
-    totalMeaningfulChars,
-    chineseChars: totalChinese,
-    chineseRatio,
-  };
-}
-
 /**
  * Assembles text from pdfjs TextContent items into a single string.
  * Adds newlines for items with EOL flag, spaces otherwise.

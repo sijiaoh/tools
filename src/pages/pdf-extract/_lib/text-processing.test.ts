@@ -4,9 +4,7 @@ import {
   normalizeText,
   formatPageBlock,
   joinPages,
-  analyzeChineseExtraction,
   type TextItem,
-  type PageDebugInfo,
 } from './text-processing';
 
 describe('assemblePageText', () => {
@@ -98,67 +96,5 @@ describe('joinPages', () => {
 
   it('handles empty array', () => {
     expect(joinPages([])).toBe('\n');
-  });
-});
-
-describe('analyzeChineseExtraction', () => {
-  function makePage(counts: Partial<PageDebugInfo>): PageDebugInfo {
-    return {
-      pageNum: 1,
-      textItemCount: 0,
-      chineseCount: 0,
-      englishCount: 0,
-      digitCount: 0,
-      otherCount: 0,
-      ...counts,
-    };
-  }
-
-  it('returns no issue for documents with good Chinese ratio', () => {
-    const pages: PageDebugInfo[] = [
-      makePage({ chineseCount: 100, englishCount: 20, otherCount: 10 }),
-    ];
-    const result = analyzeChineseExtraction(pages);
-    expect(result.hasIssue).toBe(false);
-    expect(result.chineseChars).toBe(100);
-    expect(result.chineseRatio).toBeCloseTo(0.769, 2);
-  });
-
-  it('returns no issue for documents with few characters', () => {
-    const pages: PageDebugInfo[] = [
-      makePage({ chineseCount: 0, otherCount: 30 }),
-    ];
-    const result = analyzeChineseExtraction(pages);
-    expect(result.hasIssue).toBe(false);
-    expect(result.totalMeaningfulChars).toBe(30);
-  });
-
-  it('detects issue when Chinese ratio is low and other chars are high', () => {
-    // Simulates failed extraction where Chinese becomes symbols
-    const pages: PageDebugInfo[] = [
-      makePage({ chineseCount: 5, englishCount: 50, otherCount: 100 }),
-    ];
-    const result = analyzeChineseExtraction(pages);
-    expect(result.hasIssue).toBe(true);
-    expect(result.chineseRatio).toBeLessThan(0.05);
-  });
-
-  it('returns no issue for pure English documents', () => {
-    const pages: PageDebugInfo[] = [
-      makePage({ chineseCount: 0, englishCount: 200, otherCount: 10 }),
-    ];
-    const result = analyzeChineseExtraction(pages);
-    // No issue because otherCount is not greater than chineseCount significantly
-    expect(result.hasIssue).toBe(false);
-  });
-
-  it('aggregates counts across multiple pages', () => {
-    const pages: PageDebugInfo[] = [
-      makePage({ pageNum: 1, chineseCount: 50, englishCount: 10 }),
-      makePage({ pageNum: 2, chineseCount: 50, englishCount: 10 }),
-    ];
-    const result = analyzeChineseExtraction(pages);
-    expect(result.chineseChars).toBe(100);
-    expect(result.totalMeaningfulChars).toBe(120);
   });
 });
